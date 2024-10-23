@@ -8,7 +8,7 @@ import time
 logging.basicConfig(level=logging.DEBUG)
 
 # Initialisation du client Hugging Face avec la clé API
-client = InferenceClient(api_key="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")
+client = InferenceClient(st.secrets["HUGGINGFACE_API_KEY"])
 
 # Interface Streamlit
 st.title("🤔 Explorateur de Sous-questions avec IA")
