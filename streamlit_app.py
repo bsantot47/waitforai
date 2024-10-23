@@ -184,7 +184,7 @@ if question:
     question_language = languages[selected_language]
 
     # Étape 1 : Génération de la réponse initiale
-    def get_response_with_retries(prompt, max_retries=3, max_tokens=3000):
+    def get_response_with_retries(prompt, max_retries=3, max_tokens=6000):
         retry_count = 0
         response = None
         while not response and retry_count < max_retries:
