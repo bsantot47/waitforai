@@ -226,7 +226,7 @@ if question:
     # Étape 2 : Génération des sous-questions de niveau 1
     with st.spinner('🔄 Génération des sous-questions de niveau 1...'):
         prompt_sous_questions_1 = f"Question principale : \"{question}\"\n\nGénère deux sous-questions (nommées 1.1 et 1.2) qui approfondissent des aspects spécifiques de la question principale. Assure-toi que ce sont des questions et non des affirmations. Donne une réponse détaillée pour chacune d'elles."
-        response = get_response_with_retries(prompt_sous_questions_1)
+        response = get_response_with_retries(prompt_sous_questions_1,  max_tokens=6000)
 
         if not response:
             st.error("❌ Aucune réponse n'a été reçue de l'API pour les sous-questions de niveau 1 après plusieurs tentatives.")
@@ -260,7 +260,7 @@ if question:
     # Étape 3 : Génération des sous-sous-questions de niveau 2
     with st.spinner('🔄 Génération des sous-sous-questions de niveau 2...'):
         prompt_sous_questions_2 = f"Question principale : \"{question}\"\n\nPour chaque sous-question de niveau 1 (1.1 et 1.2), génère deux nouvelles sous-questions (nommées 1.1.1, 1.1.2, 1.2.1, et 1.2.2) qui explorent davantage les réponses. Assure-toi que ce sont des questions et non des affirmations. Donne une réponse détaillée pour chacune d'elles."
-        response = get_response_with_retries(prompt_sous_questions_2, max_tokens=2000)
+        response = get_response_with_retries(prompt_sous_questions_2, max_tokens=6000)
 
         if not response:
             st.error("❌ Aucune réponse n'a été reçue de l'API pour les sous-sous-questions de niveau 2 après plusieurs tentatives.")
