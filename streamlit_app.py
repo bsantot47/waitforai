@@ -226,72 +226,93 @@ if question:
                 logging.debug(f"Réponse utilisateur pour la question principale enregistrée : {user_main_response}")
                 st.success("✅ Réponse principale enregistrée avec succès.")
 
-    # Étape 2 : Génération des sous-questions de niveau 1
+    # Étape 2 : Génération des Sous-Questions de Niveau 1
+    def generate_sub_questions_1(question, main_question_response):
+        prompts = [
+            f"Question principale : \"{question}\"\n\nGénère une sous-question (nommée 1.1) qui approfondit un aspect spécifique de la question principale. Assure-toi que c'est une question et non une affirmation. Pour cette sous-question, donne une réponse détaillée.",
+            f"Question principale : \"{question}\"\n\nGénère une sous-question (nommée 1.2) qui approfondit un autre aspect spécifique de la question principale. Assure-toi que c'est une question et non une affirmation. Pour cette sous-question, donne une réponse détaillée."
+        ]
+        responses = []
+        for prompt in prompts:
+            response = get_response_with_retries(prompt, max_tokens=3000)
+            if response:
+                responses.append(response['choices'][0]['message']['content'])
+        return responses
+
     with st.spinner('🔄 Génération des sous-questions de niveau 1...'):
-        prompt_sous_questions_1 = f"Question principale : \"{question}\"\n\nGénère deux sous-questions (nommées 1.1 et 1.2) qui approfondissent des aspects spécifiques de la question principale. Assure-toi que ce sont des questions et non des affirmations. Pour chaque sous-question, donne une réponse détaillée."
-        response = get_response_with_retries(prompt_sous_questions_1,  max_tokens=6000)
+        responses = generate_sub_questions_1(question, main_question_response)
 
-        if not response:
-            st.error("❌ Aucune réponse n'a été reçue de l'API pour les sous-questions de niveau 1 après plusieurs tentatives.")
-        else:
-            generated_response = response['choices'][0]['message']['content']
-            sous_questions = re.findall(r'(\d+\.\d+ [^\n]+)', generated_response)
-            ia_responses = re.findall(r'Réponse : ([^\n]+)', generated_response)
+        sous_questions = []
+        ia_responses = []
+        for generated_response in responses:
+            sous_questions += re.findall(r'(\d+\.\d+ [^\n]+)', generated_response)
+            ia_responses += re.findall(r'Réponse : ([^\n]+)', generated_response)
 
-            if len(sous_questions) != len(ia_responses):
-                st.warning(f"⚠️ Nombre de sous-questions ({len(sous_questions)}) ne correspond pas au nombre de réponses IA ({len(ia_responses)}).")
+        if len(sous_questions) != len(ia_responses):
+            st.warning(f"⚠️ Nombre de sous-questions ({len(sous_questions)}) ne correspond pas au nombre de réponses IA ({len(ia_responses)}).")
 
-            if sous_questions:
-                st.write(f"### {translations[selected_language]['sub_questions_1']}")
-                user_responses_1 = {}
+        if sous_questions:
+            st.write(f"### {translations[selected_language]['sub_questions_1']}")
+            user_responses_1 = {}
 
-                for idx, question in enumerate(sous_questions):
-                    question_id, question_text = question.split(' ', 1)
-                    st.write(f"📍 **{question_id} :** {question_text.strip()}")
-                    if idx < len(ia_responses):
-                        st.write(f"**{translations[selected_language]['response']}** {ia_responses[idx]}")
-                    else:
-                        st.write(f"**{translations[selected_language]['response']}** Aucune réponse disponible.")
+            for idx, question in enumerate(sous_questions):
+                question_id, question_text = question.split(' ', 1)
+                st.write(f"📍 **{question_id} :** {question_text.strip()}")
+                if idx < len(ia_responses):
+                    st.write(f"**{translations[selected_language]['response']}** {ia_responses[idx]}")
+                else:
+                    st.write(f"**{translations[selected_language]['response']}** Aucune réponse disponible.")
 
-                    unique_key = f"user_response_{question_id}_1_{idx}"
-                    user_responses_1[question_id] = st.text_area(f"Votre réponse pour {question_id}", placeholder="Entrez votre réponse ici...", key=unique_key)
-                    logging.debug(f"Réponse utilisateur pour {question_id} avant validation : {user_responses_1[question_id]}")
-                    if st.button(f"Valider la réponse pour {question_id}", key=f"validate_{question_id}_1_{idx}"):
-                        logging.debug(f"Réponse utilisateur pour {question_id} enregistrée : {user_responses_1[question_id]}")
-                        st.success(f"✅ Réponse pour {question_id} enregistrée avec succès.")
+                unique_key = f"user_response_{question_id}_1_{idx}"
+                user_responses_1[question_id] = st.text_area(f"Votre réponse pour {question_id}", placeholder="Entrez votre réponse ici...", key=unique_key)
+                logging.debug(f"Réponse utilisateur pour {question_id} avant validation : {user_responses_1[question_id]}")
+                if st.button(f"Valider la réponse pour {question_id}", key=f"validate_{question_id}_1_{idx}"):
+                    logging.debug(f"Réponse utilisateur pour {question_id} enregistrée : {user_responses_1[question_id]}")
+                    st.success(f"✅ Réponse pour {question_id} enregistrée avec succès.")
 
-    # Étape 3 : Génération des sous-sous-questions de niveau 2
+    # Étape 3 : Génération des Sous-Sous-Questions de Niveau 2
+    def generate_sub_sub_questions_2(question, sous_questions):
+        prompts = []
+        for sq in sous_questions:
+            question_id = sq.split(' ')[0]
+            prompts.append(f"Question principale : \"{question}\"\n\nPour la sous-question {question_id}, génère deux nouvelles sous-questions (nommées {question_id}.1 et {question_id}.2) qui explorent davantage la réponse. Assure-toi que ce sont des questions et non des affirmations. Pour chaque sous-sous-question, donne une réponse détaillée.")
+        
+        responses = []
+        for prompt in prompts:
+            response = get_response_with_retries(prompt, max_tokens=3000)
+            if response:
+                responses.append(response['choices'][0]['message']['content'])
+        return responses
+
     with st.spinner('🔄 Génération des sous-sous-questions de niveau 2...'):
-        prompt_sous_questions_2 = f"Question principale : \"{question}\"\n\nPour chaque sous-question de niveau 1 (1.1 et 1.2), génère deux nouvelles sous-questions (nommées 1.1.1, 1.1.2, 1.2.1, et 1.2.2) qui explorent davantage les réponses. Assure-toi que ce sont des questions et non des affirmations. Pour chaque sous-sous-question, donne une réponse détaillée."
-        response = get_response_with_retries(prompt_sous_questions_2, max_tokens=6000)
+        responses = generate_sub_sub_questions_2(question, sous_questions)
 
-        if not response:
-            st.error("❌ Aucune réponse n'a été reçue de l'API pour les sous-sous-questions de niveau 2 après plusieurs tentatives.")
-        else:
-            generated_response = response['choices'][0]['message']['content']
-            sous_sous_questions = re.findall(r'(\d+\.\d+\.\d+ [^\n]+)', generated_response)
-            ia_responses_2 = re.findall(r'Réponse : ([^\n]+)', generated_response)
+        sous_sous_questions = []
+        ia_responses_2 = []
+        for generated_response in responses:
+            sous_sous_questions += re.findall(r'(\d+\.\d+\.\d+ [^\n]+)', generated_response)
+            ia_responses_2 += re.findall(r'Réponse : ([^\n]+)', generated_response)
 
-            if len(sous_sous_questions) != len(ia_responses_2):
-                st.warning(f"⚠️ Nombre de sous-sous-questions ({len(sous_sous_questions)}) ne correspond pas au nombre de réponses IA ({len(ia_responses_2)}).")
+        if len(sous_sous_questions) != len(ia_responses_2):
+            st.warning(f"⚠️ Nombre de sous-sous-questions ({len(sous_sous_questions)}) ne correspond pas au nombre de réponses IA ({len(ia_responses_2)}).")
 
-            if sous_sous_questions:
-                st.write(f"### {translations[selected_language]['sub_questions_2']}")
-                user_responses_2 = {}
+        if sous_sous_questions:
+            st.write(f"### {translations[selected_language]['sub_questions_2']}")
+            user_responses_2 = {}
 
-                for idx, question in enumerate(sous_sous_questions):
-                    question_id, question_text = question.split(' ', 1)
-                    st.write(f"📍 **{question_id} :** {question_text.strip()}")
-                    if idx < len(ia_responses_2):
-                        st.write(f"**{translations[selected_language]['response']}** {ia_responses_2[idx]}")
-                    else:
-                        st.write(f"**{translations[selected_language]['response']}** Aucune réponse disponible.")
-                    unique_key = f"user_response_{question_id}_2_{idx}"
-                    user_responses_2[question_id] = st.text_area(f"Votre réponse pour {question_id}", placeholder="Entrez votre réponse ici...", key=unique_key)
-                    logging.debug(f"Réponse utilisateur pour {question_id} avant validation : {user_responses_2[question_id]}")
-                    if st.button(f"Valider la réponse pour {question_id}", key=f"validate_{question_id}_2_{idx}"):
-                        logging.debug(f"Réponse utilisateur pour {question_id} enregistrée : {user_responses_2[question_id]}")
-                        st.success(f"✅ Réponse pour {question_id} enregistrée avec succès.")
+            for idx, question in enumerate(sous_sous_questions):
+                question_id, question_text = question.split(' ', 1)
+                st.write(f"📍 **{question_id} :** {question_text.strip()}")
+                if idx < len(ia_responses_2):
+                    st.write(f"**{translations[selected_language]['response']}** {ia_responses_2[idx]}")
+                else:
+                    st.write(f"**{translations[selected_language]['response']}** Aucune réponse disponible.")
+                unique_key = f"user_response_{question_id}_2_{idx}"
+                user_responses_2[question_id] = st.text_area(f"Votre réponse pour {question_id}", placeholder="Entrez votre réponse ici...", key=unique_key)
+                logging.debug(f"Réponse utilisateur pour {question_id} avant validation : {user_responses_2[question_id]}")
+                if st.button(f"Valider la réponse pour {question_id}", key=f"validate_{question_id}_2_{idx}"):
+                    logging.debug(f"Réponse utilisateur pour {question_id} enregistrée : {user_responses_2[question_id]}")
+                    st.success(f"✅ Réponse pour {question_id} enregistrée avec succès.")
 
     # Étape 4 : Reformulation finale
     if st.button(translations[selected_language]['generate_final_summary']):
