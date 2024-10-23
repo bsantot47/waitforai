@@ -7,11 +7,8 @@ import time
 # Configuration du logger
 logging.basicConfig(level=logging.DEBUG)
 
-# Récupération de la clé API Hugging Face depuis les secrets de Streamlit
-api_key = st.secrets["HUGGINGFACE_API_KEY"]
-
-# Initialisation du client Hugging Face avec la clé API récupérée
-client = InferenceClient(api_key=api_key)
+# Initialisation du client Hugging Face avec la clé API
+client = InferenceClient(api_key="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")
 
 # Interface Streamlit
 st.title("🤔 Explorateur de Sous-questions avec IA")
@@ -340,4 +337,3 @@ if question:
 
             else:
                 st.error("❌ Aucune reformulation finale n'a été reçue de l'API après plusieurs tentatives.")
-
