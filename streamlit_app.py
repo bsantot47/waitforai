@@ -227,7 +227,7 @@ if question:
         response = client.chat_completion(
             model="mistralai/Mistral-7B-Instruct-v0.3",
             messages=[{"role": "user", "content": prompt_principal}],
-            max_tokens=4000
+            max_tokens=6000
         )
 
         # Vérifier si la réponse est vide
@@ -403,7 +403,7 @@ if question:
             reformulation_response = client.chat_completion(
                 model="mistralai/Mistral-7B-Instruct-v0.3",
                 messages=[{"role": "user", "content": reformulation_prompt}],
-                max_tokens=4000
+                max_tokens=6000
             )
 
             if reformulation_response:
