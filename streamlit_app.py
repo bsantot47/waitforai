@@ -376,7 +376,9 @@ if question:
     # Étape 4 : Reformulation finale
     if st.button(translations[selected_language]['generate_final_summary']):
         with st.spinner('📝 Génération de la reformulation finale...'):
-            reformulation_prompt = f"Question principale : \"{question}\"\n\nRéponse initiale :\n{main_question_response}\n\n"
+            reformulation_prompt = f"Question principale : \"{question}\"\n\n"
+            reformulation_prompt += "Voici la réponse initiale à la question principale :\n"
+            reformulation_prompt += f"{main_question_response}\n\n"
             reformulation_prompt += "Analyse des sous-questions et des réponses IA et utilisateur :\n\n"
 
             # Boucle sur les sous-questions et leurs réponses IA/utilisateur
@@ -386,15 +388,14 @@ if question:
                 reformulation_prompt += f"Réponse IA : {ia_response}\n"
                 reformulation_prompt += f"Réponse utilisateur : {user_response}\n\n"
 
-            # Ajout d'un rappel explicite pour reformuler la réponse principale en détail
+            # Consigne finale, avec inclusion de la question principale
             reformulation_prompt += (
-                "\nReformule la réponse à la **question principale** en prenant en compte "
-                "les informations des sous-questions et des réponses utilisateur et IA. "
-                "La reformulation doit être longue, détaillée et répondre spécifiquement "
-                "à la question principale tout en intégrant des informations pertinentes des "
-                "sous-questions. Assure-toi que toutes les réponses des sous-questions "
-                "soient utilisées pour enrichir la réponse."
+                f"\nMaintenant, reformule la **réponse à la question principale** : \"{question}\" en prenant en compte "
+                "les informations des sous-questions et des réponses IA et utilisateur. "
+                "Assure-toi que la reformulation soit longue, détaillée, et qu'elle réponde spécifiquement à la **question principale**, "
+                "tout en intégrant des éléments pertinents des sous-questions pour enrichir la réponse, mais sans s'écarter de la **question principale**."
             )
+
 
 
 
