@@ -22,7 +22,11 @@ def get_ia_response(prompt, max_tokens=600):
         messages=[{"role": "user", "content": prompt}],
         max_tokens=max_tokens
     )
-    return response['choices'][0]['message']['content'] if response else None
+    if response:
+        return response['choices'][0]['message']['content']
+    else:
+        st.error("Erreur dans la réponse de l'API.")
+        return ""
 
 # Fonction pour générer les sous-questions et les réponses IA à chaque niveau
 def generate_subquestions(question, level):
@@ -202,7 +206,7 @@ translations = {
 
 # Étape 1 : Saisie de la question principale
 st.write(f"### {translations[selected_language]['enter_question']}")
-question = st.text_input("", placeholder="Comment vendre des bijoux sur internet ?")
+question = st.text_input("", placeholder="Comment vendre des bijoux sur internet ?", label_visibility="collapsed")
 
 # Stocker toutes les réponses IA et utilisateur dans un dictionnaire structuré
 responses = {"main_question": question, "ia_response": None, "user_response": None, "sub_questions": {}}
@@ -217,7 +221,7 @@ if question:
         responses["ia_response"] = main_response
 
     # Réponse de l'utilisateur à la question principale
-    user_main_response = st.text_area(f"{translations[selected_language]['your_response']} {question}", placeholder="Entrez votre réponse ici...")
+    user_main_response = st.text_area(f"{translations[selected_language]['your_response']} {question}", placeholder="Entrez votre réponse ici...", key="user_main_response")
     responses["user_response"] = user_main_response
 
     # Étape 2 : Générer les sous-questions de niveau 1
