@@ -2,7 +2,6 @@ import streamlit as st
 import logging
 from huggingface_hub import InferenceClient
 import re
-import time
 
 # Configuration du logger
 logging.basicConfig(level=logging.DEBUG)
@@ -179,10 +178,12 @@ translations = {
 
 # Fonction pour générer une réponse
 def generate_response(prompt):
-    completion_request = ChatCompletionRequest(messages=[UserMessage(content=prompt)])
-    tokens = tokenizer.encode_chat_completion(completion_request).tokens
-    out_tokens, _ = generate([tokens], model, max_tokens=6000, temperature=0.0, eos_id=tokenizer.instruct_tokenizer.tokenizer.eos_id)
-    return tokenizer.instruct_tokenizer.tokenizer.decode(out_tokens[0])
+    try:
+        response = client.text_generation("mistralai/Mistral-7B-Instruct-v0.3", inputs=prompt, parameters={"max_length": 1000})
+        return response.get("generated_text", "Erreur lors de la génération.")
+    except Exception as e:
+        logging.error(f"Erreur lors de la génération de la réponse : {e}")
+        return "Erreur lors de la génération de la réponse."
 
 # Fonction pour extraire les sous-questions
 def extract_sub_questions(response):
@@ -201,8 +202,8 @@ def generate_final_summary(question, main_question_response, sous_questions, ia_
         reformulation_prompt += f"Réponse IA : {ia_response}\n"
         reformulation_prompt += f"Réponse utilisateur : {user_response}\n\n"
 
-    reformulation_prompt += f"\nMaintenant, reformule la **réponse à la question principale** : \"{question}\" en prenant en compte les informations des sous-questions et des réponses IA et utilisateur. Assure-toi que la reformulation soit longue, détaillée, et qu'elle réponde spécifiquement à la **question principale**, tout en intégrant des éléments pertinents des sous-questions pour enrichir la réponse, mais sans s'écarter de la **question principale**."
-
+    reformulation_prompt += f"\nMaintenant, reformule la **réponse à la question principale** : \"{question}\" en prenant en compte les informations des sous-questions et des réponses IA et utilisateur."
+    
     return generate_response(reformulation_prompt)
 
 # Étape 1 : Saisie de la question principale
@@ -211,7 +212,6 @@ question = st.text_input("", placeholder="Comment vendre des bijoux sur internet
 
 if question:
     with st.spinner('🧠 Génération de la réponse initiale...'):
-        # Générer la réponse initiale avec le modèle Mistral
         prompt_principal = f"""
         Question principale :
         "{question}"
@@ -221,61 +221,29 @@ if question:
         Ensuite, génère deux sous-questions (nommées 1.1 et 1.2) qui approfondissent des aspects spécifiques de la question principale, puis réponds à chacune des deux sous-questions.
 
         Pour chaque sous-question de niveau 1 (1.1 et 1.2), génère deux nouvelles sous-questions (nommées 1.1.1, 1.1.2, 1.2.1, et 1.2.2) qui explorent davantage les réponses, mais **ne génère pas de sous-questions supplémentaires** au-delà de celles-ci. Limite-toi uniquement à ces sous-questions.
-
-        Format attendu :
-        Question principale : [Question principale]
-
-        Réponse : [Réponse principale]
-        Sous-questions de Niveau 1 :
-
-        1.1 [Première sous-question]
-        Réponse : [Réponse à la sous-question 1.1]
-
-        Sous-questions de Niveau 2 :
-        1.1.1 [Sous-question dérivée de 1.1]
-        Réponse : [Réponse à la sous-question 1.1.1]
-        1.1.2 [Sous-question dérivée de 1.1]
-        Réponse : [Réponse à la sous-question 1.1.2]
-
-        1.2 [Deuxième sous-question]
-        Réponse : [Réponse à la sous-question 1.2]
-
-        Sous-questions de Niveau 2 :
-        1.2.1 [Sous-question dérivée de 1.2]
-        Réponse : [Réponse à la sous-question 1.2.1]
-        1.2.2 [Sous-question dérivée de 1.2]
-        Réponse : [Réponse à la sous-question 1.2.2]
-
-        stop toi a ce nombre de sous questions
         """
         logging.debug(f"Prompt généré : {prompt_principal}")
 
         # Demande de réponse au modèle
         generated_response = generate_response(prompt_principal)
 
-        # Vérifier si la réponse est vide
         if not generated_response:
             st.error("❌ Aucune réponse n'a été reçue du modèle.")
         else:
-            # Extraire la réponse textuelle
             st.write("### " + translations[selected_language]['initial_response'])
             st.write(f"**{translations[selected_language]['main_question']}** {question}")
             main_question_response = generated_response.split('Sous-questions de Niveau 1 :')[0].strip()
             st.write(f"**{translations[selected_language]['response']}** {main_question_response}")
 
-            # Champ pour la réponse de l'utilisateur à la question principale
             st.subheader("💡 " + translations[selected_language]['your_response'])
             user_main_response = st.text_area(f"{translations[selected_language]['your_response']} {question}", placeholder="Entrez votre réponse ici...")
 
-            # EXTRACTION des sous-questions générées dynamiquement à partir de la réponse de l'IA
             sous_questions = extract_sub_questions(generated_response)
-            ia_responses = re.findall(r'Réponse : ([^\n]+)', generated_response)  # Extraire les réponses IA après "Réponse :"
+            ia_responses = re.findall(r'Réponse : ([^\n]+)', generated_response)
 
-            # Vérifier que le nombre de sous-questions correspond au nombre de réponses IA
             if len(sous_questions) != len(ia_responses):
                 st.warning(f"⚠️ Nombre de sous-questions ({len(sous_questions)}) ne correspond pas au nombre de réponses IA ({len(ia_responses)}).")
 
-            # Vérifier si des sous-questions sont bien extraites
             if sous_questions:
                 st.write("### " + translations[selected_language]['sub_questions_1'])
                 for sq in sous_questions:
@@ -283,100 +251,31 @@ if question:
             else:
                 st.error("❌ Aucune sous-question n'a été extraite.")
 
-            # Créer un formulaire pour que l'utilisateur puisse entrer ses réponses aux mêmes sous-questions
             st.subheader("💡 Vos réponses aux questions générées par l'IA")
-
             user_responses = {}
             response_sources = {}
 
             for idx, question in enumerate(sous_questions):
                 question_id, question_text = question.split(' ', 1)
 
-                # Carte pour chaque question
                 with st.expander(f"**{question_id} : {question_text.strip()}**", expanded=True):
-                    # Afficher la réponse de l'IA uniquement si elle existe
                     if idx < len(ia_responses):
                         st.write(f"**{translations[selected_language]['response']}** {ia_responses[idx]}")
                     else:
                         st.write(f"**{translations[selected_language]['response']}** Aucune réponse disponible.")
 
-                    # Champ pour la réponse de l'utilisateur
                     user_responses[question_id] = st.text_area(f"Votre réponse pour {question_id}", placeholder="Entrez votre réponse ici...")
 
-                    # Niveau 1 : Choisir la catégorie générale
                     response_type = st.selectbox(f"Type d'origine de la réponse pour {question_id}",
                                                  ["Réponse personnelle", "IA", "Forum", "Réseaux sociaux",
                                                   "Vidéos en ligne", "Wikipedia", "Livre",
                                                   "Article scientifique", "Autre"],
                                                  key=f"type_{question_id}")
 
-                    # Niveau 2 : Sous-choix en fonction du type sélectionné
-                    if response_type == "Réponse personnelle":
-                        origin_details = "Réponse fournie personnellement par l'utilisateur."
+                    origin_details = st.text_input(f"Détails pour {response_type} ({question_id})", key=f"details_{question_id}")
 
-                    elif response_type == "IA":
-                        ia_name = st.selectbox(f"Nom de l'IA pour {question_id}",
-                                               ["ChatGPT", "Mistral", "Anthropic", "Bard", "Autre"],
-                                               key=f"ia_{question_id}")
-                        if ia_name == "Autre":
-                            ia_name = st.text_input(f"Précisez le nom de l'IA pour {question_id}", key=f"ia_custom_{question_id}")
-
-                        ia_model = st.selectbox(f"Modèle de l'IA pour {question_id}",
-                                                ["GPT-3.5", "GPT-4", "Mistral-7B", "Claude 2", "Autre"],
-                                                key=f"model_{question_id}")
-                        if ia_model == "Autre":
-                            ia_model = st.text_input(f"Précisez le modèle de l'IA pour {question_id}", key=f"model_custom_{question_id}")
-                        origin_details = f"{ia_name}, modèle {ia_model}"
-
-                    elif response_type == "Forum":
-                        forum_name = st.selectbox(f"Nom du forum pour {question_id}",
-                                                  ["Reddit", "Quora", "Stack Overflow", "Autre"],
-                                                  key=f"forum_{question_id}")
-                        if forum_name == "Autre":
-                            forum_name = st.text_input(f"Précisez le nom du forum pour {question_id}", key=f"forum_custom_{question_id}")
-                        forum_link = st.text_input(f"Lien vers la discussion du forum pour {question_id}", key=f"forum_link_{question_id}")
-                        origin_details = f"Forum : {forum_name}, Lien : {forum_link}"
-
-                    elif response_type == "Réseaux sociaux":
-                        social_media = st.selectbox(f"Plateforme de réseaux sociaux pour {question_id}",
-                                                    ["Twitter/X", "Facebook", "LinkedIn", "Instagram", "Autre"],
-                                                    key=f"social_{question_id}")
-                        if social_media == "Autre":
-                            social_media = st.text_input(f"Précisez la plateforme pour {question_id}", key=f"social_custom_{question_id}")
-                        social_link = st.text_input(f"Lien vers le post pour {question_id}", key=f"social_link_{question_id}")
-                        origin_details = f"Réseau social : {social_media}, Lien : {social_link}"
-
-                    elif response_type == "Vidéos en ligne":
-                        video_platform = st.selectbox(f"Plateforme vidéo pour {question_id}",
-                                                      ["YouTube", "Vimeo", "TikTok", "Autre"],
-                                                      key=f"video_{question_id}")
-                        if video_platform == "Autre":
-                            video_platform = st.text_input(f"Précisez la plateforme vidéo pour {question_id}", key=f"video_custom_{question_id}")
-                        video_link = st.text_input(f"Lien vers la vidéo pour {question_id}", key=f"video_link_{question_id}")
-                        origin_details = f"Vidéo : {video_platform}, Lien : {video_link}"
-
-                    elif response_type == "Wikipedia":
-                        wiki_link = st.text_input(f"Lien vers l'article Wikipedia pour {question_id}", key=f"wiki_link_{question_id}")
-                        origin_details = f"Wikipedia : {wiki_link}"
-
-                    elif response_type == "Livre":
-                        book_title = st.text_input(f"Titre du livre pour {question_id}", key=f"book_{question_id}")
-                        book_author = st.text_input(f"Auteur du livre pour {question_id}", key=f"author_{question_id}")
-                        origin_details = f"Livre : {book_title}, Auteur : {book_author}"
-
-                    elif response_type == "Article scientifique":
-                        article_title = st.text_input(f"Titre de l'article pour {question_id}", key=f"article_{question_id}")
-                        journal_name = st.text_input(f"Nom du journal ou de la publication pour {question_id}", key=f"journal_{question_id}")
-                        article_link = st.text_input(f"Lien ou DOI pour {question_id}", key=f"article_link_{question_id}")
-                        origin_details = f"Article : {article_title}, Journal : {journal_name}, Lien/DOI : {article_link}"
-
-                    else:  # Autre
-                        origin_details = st.text_input(f"Précisez l'origine de la réponse pour {question_id}", key=f"other_{question_id}")
-
-                    # Sauvegarder l'origine et les détails
                     response_sources[question_id] = {"type": response_type, "details": origin_details}
 
-            # Si l'utilisateur a fourni des réponses, les afficher avec leur origine
             if st.button("✅ Envoyer vos réponses"):
                 st.subheader("🔍 Vos réponses soumises :")
                 if user_main_response:
@@ -395,7 +294,6 @@ if question:
                     else:
                         st.write(f"**{question_id} :** Aucune réponse soumise.")
 
-    # Étape 4 : Reformulation finale
     if st.button(translations[selected_language]['generate_final_summary']):
         with st.spinner('📝 Génération de la reformulation finale...'):
             final_summary = generate_final_summary(question, main_question_response, sous_questions, ia_responses, user_responses)
@@ -404,19 +302,10 @@ if question:
                 st.write(f"### {translations[selected_language]['final_summary']}")
                 st.write(final_summary)
 
-                # Comparaison des réponses
                 st.write(f"### {translations[selected_language]['compare_responses']}")
                 st.write(f"**{translations[selected_language]['initial_response']}**")
                 st.write(main_question_response)
                 st.write(f"**{translations[selected_language]['final_response']}**")
                 st.write(final_summary)
-
-                st.write(f"### {translations[selected_language]['summary_details']}")
-                st.write("La reformulation a pris en compte les réponses IA et utilisateur pour chaque sous-question. Voici un résumé des éléments ajoutés ou modifiés :")
-
-                for question_id, response in zip(sous_questions, ia_responses):
-                    user_response = user_responses.get(question_id, "")
-                    st.write(f"- **{question_id}** : Réponse IA : {response}, Réponse utilisateur : {user_response}")
-
             else:
                 st.error("❌ Aucune reformulation finale n'a été reçue du modèle.")
