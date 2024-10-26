@@ -5,7 +5,7 @@ from mistral_inference.generate import generate
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 from mistral_common.protocol.instruct.messages import UserMessage
 from mistral_common.protocol.instruct.request import ChatCompletionRequest
-from huggingface_hub import snapshot_download
+from huggingface_hub import InferenceClient
 from pathlib import Path
 import re
 import time
