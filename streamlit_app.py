@@ -16,18 +16,11 @@ logging.basicConfig(level=logging.DEBUG)
 # Récupération de la clé API Hugging Face depuis les secrets de Streamlit
 api_key = st.secrets["HUGGINGFACE_API_KEY"]
 
-# Téléchargement du modèle
-mistral_models_path = Path.home().joinpath('mistral_models', '7B-Instruct-v0.3')
-mistral_models_path.mkdir(parents=True, exist_ok=True)
-snapshot_download(repo_id="mistralai/Mistral-7B-Instruct-v0.3", allow_patterns=["params.json", "consolidated.safetensors", "tokenizer.model.v3"], local_dir=mistral_models_path, use_auth_token=api_key)
-
-# Initialisation du modèle et du tokenizer
-tokenizer = MistralTokenizer.from_file(f"{mistral_models_path}/tokenizer.model.v3")
-model = Transformer.from_folder(mistral_models_path)
+# Initialisation du client Hugging Face avec la clé API récupérée
+client = InferenceClient(api_key=api_key)
 
 # Interface Streamlit
 st.title("🧐 Explorateur de Sous-questions avec IA")
-
 # Sélecteur de langue
 languages = {
     "English": "en",
