@@ -15,32 +15,7 @@ client = InferenceClient(api_key=api_key)
 # Interface Streamlit
 st.title("🧐 Explorateur de Sous-questions avec IA")
 
-# Fonction pour appeler l'API Hugging Face avec un prompt spécifique
-def get_ia_response(prompt, max_tokens=600):
-    response = client.chat_completion(
-        model="mistralai/Mistral-7B-Instruct-v0.3",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens
-    )
-    if response:
-        return response['choices'][0]['message']['content']
-    else:
-        st.error("Erreur dans la réponse de l'API.")
-        return ""
 
-# Fonction pour générer les sous-questions et les réponses IA à chaque niveau
-def generate_subquestions(question, level):
-    prompt = f"""
-    Question : "{question}"
-    Réponds avec deux sous-questions de niveau {level} qui approfondissent des aspects spécifiques de cette question.
-    Fournis également une réponse détaillée à chaque sous-question.
-    """
-    response = get_ia_response(prompt)
-    if response:
-        subquestions = re.findall(r'(\d+\.\d+(?:\.\d+)? [^\n]+)', response)
-        ia_responses = re.findall(r'Réponse : ([^\n]+)', response)
-        return subquestions, ia_responses
-    return [], []
 
 # Sélecteur de langue
 languages = {
@@ -208,61 +183,137 @@ translations = {
 st.write(f"### {translations[selected_language]['enter_question']}")
 question = st.text_input("", placeholder="Comment vendre des bijoux sur internet ?", label_visibility="collapsed")
 
-# Stocker toutes les réponses IA et utilisateur dans un dictionnaire structuré
-responses = {"main_question": question, "ia_response": None, "user_response": None, "sub_questions": {}}
-
 if question:
-    # Génération de la réponse IA à la question principale
     with st.spinner('🧠 Génération de la réponse initiale...'):
-        main_response = get_ia_response(f"Réponds à la question principale : {question}")
-        st.write(f"### {translations[selected_language]['initial_response']}")
-        st.write(f"**{translations[selected_language]['main_question']}** {question}")
-        st.write(f"**{translations[selected_language]['response']}** {main_response}")
-        responses["ia_response"] = main_response
+        # Préparation du prompt principal
+        prompt_principal = f"""
+        Question principale : "{question}"
 
-    # Réponse de l'utilisateur à la question principale
-    user_main_response = st.text_area(f"{translations[selected_language]['your_response']} {question}", placeholder="Entrez votre réponse ici...", key="user_main_response")
-    responses["user_response"] = user_main_response
-
-    # Étape 2 : Générer les sous-questions de niveau 1
-    st.write(f"### {translations[selected_language]['sub_questions_1']}")
-    subquestions_1, ia_responses_1 = generate_subquestions(question, level=1)
-
-    for idx, (subq, ia_resp) in enumerate(zip(subquestions_1, ia_responses_1)):
-        st.write(f"**{subq}**")
-        st.write(f"Réponse IA : {ia_resp}")
+        Réponds à cette question principale avec une réponse détaillée et longue. Explique chaque aspect en profondeur.
         
-        user_response = st.text_area(f"Votre réponse pour {subq}", placeholder="Entrez votre réponse ici...", key=f"user_response_{subq}")
-        responses["sub_questions"][subq] = {"ia_response": ia_resp, "user_response": user_response, "sub_sub_questions": {}}
+        Ensuite, génère deux sous-questions (nommées 1.1 et 1.2) qui approfondissent des aspects spécifiques de la question principale, puis réponds à chacune des deux sous-questions.
+        
+        Pour chaque sous-question de niveau 1 (1.1 et 1.2), génère deux nouvelles sous-questions (nommées 1.1.1, 1.1.2, 1.2.1, et 1.2.2) qui explorent davantage les réponses, mais **ne génère pas de sous-questions supplémentaires** au-delà de celles-ci. Limite-toi uniquement à ces sous-questions.
+        
+        Format attendu :
+        Question principale : [Question principale]
+        
+        Réponse : [Réponse principale]
+        Sous-questions de Niveau 1 :
+        
+        1.1 [Première sous-question]
+        Réponse : [Réponse à la sous-question 1.1]
+        
+        Sous-questions de Niveau 2 :
+        1.1.1 [Sous-question dérivée de 1.1]
+        Réponse : [Réponse à la sous-question 1.1.1]
+        1.1.2 [Sous-question dérivée de 1.1]
+        Réponse : [Réponse à la sous-question 1.1.2]
+        
+        1.2 [Deuxième sous-question]
+        Réponse : [Réponse à la sous-question 1.2]
+        
+        Sous-questions de Niveau 2 :
+        1.2.1 [Sous-question dérivée de 1.2]
+        Réponse : [Réponse à la sous-question 1.2.1]
+        1.2.2 [Sous-question dérivée de 1.2]
+        Réponse : [Réponse à la sous-question 1.2.2]
+        
+        stop toi a ce nombre de sous questions
+        """
+        
+        # Demande de réponse à l'API sans streaming
+        response = client.chat_completion(
+            model="mistralai/Mistral-7B-Instruct-v0.3",
+            messages=[{"role": "user", "content": prompt_principal}],
+            max_tokens=6000
+        )
 
-        # Générer les sous-questions de niveau 2 pour chaque sous-question de niveau 1
-        st.write(f"### {translations[selected_language]['sub_questions_2']} pour {subq}")
-        sub_subquestions, sub_ia_responses = generate_subquestions(subq, level=2)
+        # Vérifier si la réponse est vide
+        if not response:
+            st.error("❌ Aucune réponse n'a été reçue de l'API.")
+        else:
+            # Extraire la réponse textuelle
+            generated_response = response['choices'][0]['message']['content']
+            st.write("### " + translations[selected_language]['initial_response'])
+            st.write(f"**{translations[selected_language]['main_question']}** {question}")
+            main_question_response = generated_response.split('Sous-questions de Niveau 1 :')[0].strip()
+            st.write(f"**{translations[selected_language]['response']}** {main_question_response}")
 
-        for sub_idx, (sub_subq, sub_ia_resp) in enumerate(zip(sub_subquestions, sub_ia_responses)):
-            st.write(f"**{sub_subq}**")
-            st.write(f"Réponse IA : {sub_ia_resp}")
+            # Champ pour la réponse de l'utilisateur à la question principale
+            st.subheader("💡 " + translations[selected_language]['your_response'])
+            user_main_response = st.text_area(f"{translations[selected_language]['your_response']} {question}", placeholder="Entrez votre réponse ici...")
 
-            sub_user_response = st.text_area(f"Votre réponse pour {sub_subq}", placeholder="Entrez votre réponse ici...", key=f"user_response_{sub_subq}")
-            responses["sub_questions"][subq]["sub_sub_questions"][sub_subq] = {
-                "ia_response": sub_ia_resp,
-                "user_response": sub_user_response
-            }
+            # EXTRACTION des sous-questions générées dynamiquement à partir de la réponse de l'IA
+            sous_questions = re.findall(r'(\d+\.\d+(?:\.\d+)? [^\n]+)', generated_response)
+            ia_responses = re.findall(r'Réponse : ([^\n]+)', generated_response)  # Extraire les réponses IA après "Réponse :"
 
-    # Étape 3 : Générer la reformulation finale basée sur toutes les réponses
-    if st.button(translations[selected_language]['final_summary']):
-        with st.spinner('📝 Génération de la reformulation finale...'):
-            reformulation_prompt = f"Question principale : {question}\n\nRéponse initiale : {main_response}\n\n"
-            for subq, sub_data in responses["sub_questions"].items():
-                reformulation_prompt += f"Sous-question : {subq}\nRéponse IA : {sub_data['ia_response']}\nRéponse utilisateur : {sub_data['user_response']}\n"
-                for sub_subq, sub_sub_data in sub_data["sub_sub_questions"].items():
-                    reformulation_prompt += f"Sous-sous-question : {sub_subq}\nRéponse IA : {sub_sub_data['ia_response']}\nRéponse utilisateur : {sub_sub_data['user_response']}\n"
+            # Vérifier que le nombre de sous-questions correspond au nombre de réponses IA
+            if len(sous_questions) != len(ia_responses):
+                st.warning(f"⚠️ Nombre de sous-questions ({len(sous_questions)}) ne correspond pas au nombre de réponses IA ({len(ia_responses)}).")
 
-            reformulation_prompt += (
-                "Reformule la réponse à la **question principale** en intégrant les informations des sous-questions et des sous-sous-questions, "
-                "en utilisant les réponses IA et utilisateur pour chaque niveau."
-            )
+            # Affichage des sous-questions et des réponses IA
+            if sous_questions:
+                st.write("### " + translations[selected_language]['sub_questions_1'])
+                user_responses = {}
+                response_sources = {}
 
-            final_summary = get_ia_response(reformulation_prompt)
-            st.write(f"### {translations[selected_language]['final_summary']}")
-            st.write(final_summary)
+                for idx, question in enumerate(sous_questions):
+                    question_id, question_text = question.split(' ', 1)
+
+                    # Carte pour chaque question
+                    with st.expander(f"**{question_id} : {question_text.strip()}**", expanded=True):
+                        # Afficher la réponse de l'IA uniquement si elle existe
+                        if idx < len(ia_responses):
+                            st.write(f"**{translations[selected_language]['response']}** {ia_responses[idx]}")
+                        else:
+                            st.write(f"**{translations[selected_language]['response']}** Aucune réponse disponible.")
+
+                        # Champ pour la réponse de l'utilisateur
+                        user_responses[question_id] = st.text_area(f"Votre réponse pour {question_id}", placeholder="Entrez votre réponse ici...", key=f"user_response_{question_id}")
+
+                        # Choix d'origine de la réponse utilisateur
+                        response_type = st.selectbox(f"Type d'origine de la réponse pour {question_id}",
+                                                     ["Réponse personnelle", "IA", "Forum", "Réseaux sociaux",
+                                                      "Vidéos en ligne", "Wikipedia", "Livre",
+                                                      "Article scientifique", "Autre"],
+                                                     key=f"type_{question_id}")
+                        origin_details = ""
+                        if response_type == "Autre":
+                            origin_details = st.text_input(f"Précisez l'origine de la réponse pour {question_id}", key=f"other_{question_id}")
+                        response_sources[question_id] = {"type": response_type, "details": origin_details}
+
+                # Affichage de la reformulation finale
+                if st.button(translations[selected_language]['final_summary']):
+                    with st.spinner('📝 Génération de la reformulation finale...'):
+                        reformulation_prompt = f"Question principale : \"{question}\"\n\n"
+                        reformulation_prompt += "Voici la réponse initiale à la question principale :\n"
+                        reformulation_prompt += f"{main_question_response}\n\n"
+                        reformulation_prompt += "Analyse des sous-questions et des réponses IA et utilisateur :\n\n"
+
+                        # Boucle sur les sous-questions et leurs réponses IA/utilisateur
+                        for question_id, ia_response in zip(sous_questions, ia_responses):
+                            user_response = user_responses.get(question_id, "Pas de réponse utilisateur")
+                            reformulation_prompt += f"Sous-question : {question_id}\n"
+                            reformulation_prompt += f"Réponse IA : {ia_response}\n"
+                            reformulation_prompt += f"Réponse utilisateur : {user_response}\n\n"
+
+                        # Génération de la reformulation
+                        reformulation_prompt += (
+                            f"\nMaintenant, reformule la **réponse à la question principale** : \"{question}\" en prenant en compte "
+                            "les informations des sous-questions et des réponses IA et utilisateur."
+                        )
+                        reformulation_response = client.chat_completion(
+                            model="mistralai/Mistral-7B-Instruct-v0.3",
+                            messages=[{"role": "user", "content": reformulation_prompt}],
+                            max_tokens=6000
+                        )
+
+                        if reformulation_response:
+                            final_summary = reformulation_response['choices'][0]['message']['content']
+                            st.write(f"### {translations[selected_language]['final_summary']}")
+                            st.write(final_summary)
+                        else:
+                            st.error("❌ Aucune reformulation finale n'a été reçue de l'API.")
+            else:
+                st.error("❌ Aucune sous-question n'a été extraite.")
