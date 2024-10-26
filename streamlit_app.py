@@ -1,8 +1,15 @@
 
 import streamlit as st
 import logging
-from huggingface_hub import InferenceClient
+from mistral_inference.transformer import Transformer
+from mistral_inference.generate import generate
+from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+from mistral_common.protocol.instruct.messages import UserMessage
+from mistral_common.protocol.instruct.request import ChatCompletionRequest
+from huggingface_hub import snapshot_download
+from pathlib import Path
 import re
+import time
 
 # Configuration du logger
 logging.basicConfig(level=logging.DEBUG)
@@ -10,8 +17,14 @@ logging.basicConfig(level=logging.DEBUG)
 # Récupération de la clé API Hugging Face depuis les secrets de Streamlit
 api_key = st.secrets["HUGGINGFACE_API_KEY"]
 
-# Initialisation du client Hugging Face avec la clé API récupérée
-client = InferenceClient(api_key=api_key)
+# Téléchargement du modèle
+mistral_models_path = Path.home().joinpath('mistral_models', '7B-Instruct-v0.3')
+mistral_models_path.mkdir(parents=True, exist_ok=True)
+snapshot_download(repo_id="mistralai/Mistral-7B-Instruct-v0.3", allow_patterns=["params.json", "consolidated.safetensors", "tokenizer.model.v3"], local_dir=mistral_models_path)
+
+# Initialisation du modèle et du tokenizer
+tokenizer = MistralTokenizer.from_file(f"{mistral_models_path}/tokenizer.model.v3")
+model = Transformer.from_folder(mistral_models_path)
 
 # Interface Streamlit
 st.title("🧐 Explorateur de Sous-questions avec IA")
@@ -178,13 +191,41 @@ translations = {
     }
 }
 
+# Fonction pour générer une réponse
+def generate_response(prompt):
+    completion_request = ChatCompletionRequest(messages=[UserMessage(content=prompt)])
+    tokens = tokenizer.encode_chat_completion(completion_request).tokens
+    out_tokens, _ = generate([tokens], model, max_tokens=6000, temperature=0.0, eos_id=tokenizer.instruct_tokenizer.tokenizer.eos_id)
+    return tokenizer.instruct_tokenizer.tokenizer.decode(out_tokens[0])
+
+# Fonction pour extraire les sous-questions
+def extract_sub_questions(response):
+    return re.findall(r'(\d+\.\d+(?:\.\d+)? [^\n]+)', response)
+
+# Fonction pour générer la synthèse finale
+def generate_final_summary(question, main_question_response, sous_questions, ia_responses, user_responses):
+    reformulation_prompt = f"Question principale : \"{question}\"\n\n"
+    reformulation_prompt += "Voici la réponse initiale à la question principale :\n"
+    reformulation_prompt += f"{main_question_response}\n\n"
+    reformulation_prompt += "Analyse des sous-questions et des réponses IA et utilisateur :\n\n"
+
+    for question_id, ia_response in zip(sous_questions, ia_responses):
+        user_response = user_responses.get(question_id, "Pas de réponse utilisateur")
+        reformulation_prompt += f"Sous-question : {question_id}\n"
+        reformulation_prompt += f"Réponse IA : {ia_response}\n"
+        reformulation_prompt += f"Réponse utilisateur : {user_response}\n\n"
+
+    reformulation_prompt += f"\nMaintenant, reformule la **réponse à la question principale** : \"{question}\" en prenant en compte les informations des sous-questions et des réponses IA et utilisateur. Assure-toi que la reformulation soit longue, détaillée, et qu'elle réponde spécifiquement à la **question principale**, tout en intégrant des éléments pertinents des sous-questions pour enrichir la réponse, mais sans s'écarter de la **question principale**."
+
+    return generate_response(reformulation_prompt)
+
 # Étape 1 : Saisie de la question principale
 st.write(f"### {translations[selected_language]['enter_question']}")
 question = st.text_input("", placeholder="Comment vendre des bijoux sur internet ?")
 
 if question:
     with st.spinner('🧠 Génération de la réponse initiale...'):
-        # Générer la réponse initiale avec l'API Hugging Face en utilisant la question entrée par l'utilisateur
+        # Générer la réponse initiale avec le modèle Mistral
         prompt_principal = f"""
         Question principale :
         "{question}"
@@ -218,24 +259,19 @@ if question:
         Réponse : [Réponse à la sous-question 1.2.1]
         1.2.2 [Sous-question dérivée de 1.2]
         Réponse : [Réponse à la sous-question 1.2.2]
-        
+
         stop toi a ce nombre de sous questions
         """
         logging.debug(f"Prompt généré : {prompt_principal}")
 
-        # Demande de réponse à l'API sans streaming
-        response = client.chat_completion(
-            model="mistralai/Mistral-7B-Instruct-v0.3",
-            messages=[{"role": "user", "content": prompt_principal}],
-            max_tokens=6000
-        )
+        # Demande de réponse au modèle
+        generated_response = generate_response(prompt_principal)
 
         # Vérifier si la réponse est vide
-        if not response:
-            st.error("❌ Aucune réponse n'a été reçue de l'API.")
+        if not generated_response:
+            st.error("❌ Aucune réponse n'a été reçue du modèle.")
         else:
             # Extraire la réponse textuelle
-            generated_response = response['choices'][0]['message']['content']
             st.write("### " + translations[selected_language]['initial_response'])
             st.write(f"**{translations[selected_language]['main_question']}** {question}")
             main_question_response = generated_response.split('Sous-questions de Niveau 1 :')[0].strip()
@@ -246,7 +282,7 @@ if question:
             user_main_response = st.text_area(f"{translations[selected_language]['your_response']} {question}", placeholder="Entrez votre réponse ici...")
 
             # EXTRACTION des sous-questions générées dynamiquement à partir de la réponse de l'IA
-            sous_questions = re.findall(r'(\d+\.\d+(?:\.\d+)? [^\n]+)', generated_response)
+            sous_questions = extract_sub_questions(generated_response)
             ia_responses = re.findall(r'Réponse : ([^\n]+)', generated_response)  # Extraire les réponses IA après "Réponse :"
 
             # Vérifier que le nombre de sous-questions correspond au nombre de réponses IA
@@ -376,39 +412,9 @@ if question:
     # Étape 4 : Reformulation finale
     if st.button(translations[selected_language]['generate_final_summary']):
         with st.spinner('📝 Génération de la reformulation finale...'):
-            reformulation_prompt = f"Question principale : \"{question}\"\n\n"
-            reformulation_prompt += "Voici la réponse initiale à la question principale :\n"
-            reformulation_prompt += f"{main_question_response}\n\n"
-            reformulation_prompt += "Analyse des sous-questions et des réponses IA et utilisateur :\n\n"
+            final_summary = generate_final_summary(question, main_question_response, sous_questions, ia_responses, user_responses)
 
-            # Boucle sur les sous-questions et leurs réponses IA/utilisateur
-            for question_id, ia_response in zip(sous_questions, ia_responses):
-                user_response = user_responses.get(question_id, "Pas de réponse utilisateur")
-                reformulation_prompt += f"Sous-question : {question_id}\n"
-                reformulation_prompt += f"Réponse IA : {ia_response}\n"
-                reformulation_prompt += f"Réponse utilisateur : {user_response}\n\n"
-
-            # Consigne finale, avec inclusion de la question principale
-            reformulation_prompt += (
-                f"\nMaintenant, reformule la **réponse à la question principale** : \"{question}\" en prenant en compte "
-                "les informations des sous-questions et des réponses IA et utilisateur. "
-                "Assure-toi que la reformulation soit longue, détaillée, et qu'elle réponde spécifiquement à la **question principale**, "
-                "tout en intégrant des éléments pertinents des sous-questions pour enrichir la réponse, mais sans s'écarter de la **question principale**."
-            )
-
-
-
-
-            logging.debug(f"Prompt pour reformulation finale : {reformulation_prompt}")
-
-            reformulation_response = client.chat_completion(
-                model="mistralai/Mistral-7B-Instruct-v0.3",
-                messages=[{"role": "user", "content": reformulation_prompt}],
-                max_tokens=6000
-            )
-
-            if reformulation_response:
-                final_summary = reformulation_response['choices'][0]['message']['content']
+            if final_summary:
                 st.write(f"### {translations[selected_language]['final_summary']}")
                 st.write(final_summary)
 
@@ -427,4 +433,4 @@ if question:
                     st.write(f"- **{question_id}** : Réponse IA : {response}, Réponse utilisateur : {user_response}")
 
             else:
-                st.error("❌ Aucune reformulation finale n'a été reçue de l'API après plusieurs tentatives.")
+                st.error("❌ Aucune reformulation finale n'a été reçue du modèle.")
