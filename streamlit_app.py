@@ -1,7 +1,8 @@
 import streamlit as st
 import logging
+logging.getLogger("watchdog").setLevel(logging.WARNING)
 from huggingface_hub import InferenceClient
-import re
+import time
 
 # Configuration du logger
 logging.basicConfig(level=logging.DEBUG)
