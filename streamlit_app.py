@@ -13,6 +13,25 @@ api_key = st.secrets["HUGGINGFACE_API_KEY"]
 # Initialisation du client Hugging Face avec la clé API récupérée
 client = InferenceClient(api_key=api_key)
 
+# Dictionnaire des titres pour chaque langue
+titles = {
+    "English": "WaitForAI Beta Test: Experience the model with Mistral-7B-Instruct-v0.3 (test version, not fully functional)",
+    "Français": "WaitForAI Bêta Test : Découvrez le modèle en action avec Mistral-7B-Instruct-v0.3 (version de test non finalisée)",
+    "Español": "Prueba Beta de WaitForAI: Experimente el modelo con Mistral-7B-Instruct-v0.3 (versión de prueba, no completamente funcional)",
+    "Português": "Teste Beta do WaitForAI: Experimente o modelo com Mistral-7B-Instruct-v0.3 (versão de teste, não totalmente funcional)",
+    "العربية": "اختبار تجريبي لـ WaitForAI: جرب النموذج مع Mistral-7B-Instruct-v0.3 (نسخة تجريبية غير مكتملة)",
+    "Русский": "Бета-тест WaitForAI: Оцените модель с Mistral-7B-Instruct-v0.3 (тестовая версия, не полностью функциональная)",
+    "हिन्दी": "WaitForAI बीटा परीक्षण: Mistral-7B-Instruct-v0.3 के साथ मॉडल का अनुभव करें (टेस्ट संस्करण, पूरी तरह से कार्यात्मक नहीं)",
+    "Deutsch": "WaitForAI Beta-Test: Erleben Sie das Modell mit Mistral-7B-Instruct-v0.3 (Testversion, noch nicht vollständig funktionsfähig)",
+    "日本語": "WaitForAI ベータテスト：Mistral-7B-Instruct-v0.3 でモデルを体験 (完全に機能していないテストバージョン)"
+}
+
+# Sélection du titre en fonction de la langue choisie
+selected_title = titles.get(selected_language, "WaitForAI Beta Test: Experience the model with Mistral-7B-Instruct-v0.3 (test version, not fully functional)")
+
+# Application du titre multilingue
+st.title(selected_title)
+
 # Interface Streamlit
 st.title("🧐 Explorateur de Sous-questions avec IA")
 
