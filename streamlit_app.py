@@ -13,6 +13,21 @@ api_key = st.secrets["HUGGINGFACE_API_KEY"]
 # Initialisation du client Hugging Face avec la clé API récupérée
 client = InferenceClient(api_key=api_key)
 
+# Sélecteur de langue
+languages = {
+    "English": "en",
+    "Français": "fr",
+    "Español": "es",
+    "Português": "pt",
+    "العربية": "ar",
+    "Русский": "ru",
+    "हिन्दी": "hi",
+    "Deutsch": "de",
+    "日本語": "ja"
+}
+selected_language = st.selectbox("Sélectionnez la langue", list(languages.keys()))
+selected_language_code = languages[selected_language]
+
 # Dictionnaire des titres pour chaque langue
 titles = {
     "English": "WaitForAI Beta Test: Experience the model with Mistral-7B-Instruct-v0.3 (test version, not fully functional)",
@@ -34,21 +49,6 @@ st.title(selected_title)
 
 # Interface Streamlit
 st.title("🧐 Explorateur de Sous-questions avec IA")
-
-# Sélecteur de langue
-languages = {
-    "English": "en",
-    "Français": "fr",
-    "Español": "es",
-    "Português": "pt",
-    "العربية": "ar",
-    "Русский": "ru",
-    "हिन्दी": "hi",
-    "Deutsch": "de",
-    "日本語": "ja"
-}
-selected_language = st.selectbox("Sélectionnez la langue", list(languages.keys()))
-selected_language_code = languages[selected_language]
 
 # Textes fixes traduits
 translations = {
